@@ -1,0 +1,109 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: MicroMart private PostgreSQL database for EKS
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-0565daca07040ec80
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-03d6410fcb403d865
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-003c72497427cc7c1
+
+  EksWorkerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Default: sg-0c9d496e7a0a8c1da
+
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    AllowedValues:
+      - db.t3.micro
+      - db.t3.small
+      - db.t3.medium
+
+Resources:
+  DatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: micromart/database
+      Description: MicroMart PostgreSQL credentials
+      GenerateSecretString:
+        SecretStringTemplate: '{"username":"micromartadmin"}'
+        GenerateStringKey: password
+        PasswordLength: 24
+        ExcludePunctuation: true
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow PostgreSQL from MicroMart EKS workers only
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref EksWorkerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: micromart-rds-sg
+
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: MicroMart private database subnets
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+      Tags:
+        - Key: Name
+          Value: micromart-rds-subnets
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: micromart-postgres
+      Engine: postgres
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: 20
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: micromart
+      MasterUsername: micromartadmin
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DatabaseSecret}:SecretString:password}}'
+      Port: 5432
+      PubliclyAccessible: false
+      MultiAZ: false
+      AutoMinorVersionUpgrade: true
+      BackupRetentionPeriod: 1
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DatabaseSecurityGroup
+      DeletionProtection: false
+      Tags:
+        - Key: Name
+          Value: micromart-postgres
+
+Outputs:
+  DatabaseEndpoint:
+    Description: PostgreSQL endpoint hostname
+    Value: !GetAtt Database.Endpoint.Address
+
+  DatabasePort:
+    Description: PostgreSQL port
+    Value: !GetAtt Database.Endpoint.Port
+
+  DatabaseName:
+    Value: micromart
+
+  DatabaseSecretArn:
+    Description: ARN of the database credentials secret
+    Value: !Ref DatabaseSecret
+
+  DatabaseSecurityGroupId:
+    Value: !Ref DatabaseSecurityGroup

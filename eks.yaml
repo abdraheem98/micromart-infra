@@ -1,0 +1,142 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  MicroMart Amazon EKS cluster and managed worker node group.
+  Reuses the private subnets from the micromart-network stack.
+
+Parameters:
+  ClusterName:
+    Type: String
+    Default: micromart-eks
+    Description: Name of the EKS cluster.
+
+  KubernetesVersion:
+    Type: String
+    Default: '1.34'
+    Description: >
+      Kubernetes version for the cluster. Verify that this version
+      is supported in us-east-1 before deployment.
+
+  KubectlAdminCidr:
+    Type: String
+    Description: >
+      Public IPv4 address allowed to reach the EKS public API endpoint,
+      in CIDR notation, for example 203.0.113.10/32.
+
+  NodeInstanceType:
+    Type: String
+    Default: t3.medium
+    AllowedValues:
+      - t3.medium
+      - t3.large
+    Description: EC2 instance type for each managed worker node.
+
+Resources:
+
+  # IAM role assumed by the EKS control plane
+  EKSClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+      Tags:
+        - Key: Name
+          Value: micromart-eks-cluster-role
+
+  # IAM role assumed by EC2 worker nodes
+  EKSNodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      Tags:
+        - Key: Name
+          Value: micromart-eks-node-role
+
+  # EKS control plane
+  EKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Ref ClusterName
+      Version: !Ref KubernetesVersion
+      RoleArn: !GetAtt EKSClusterRole.Arn
+      ResourcesVpcConfig:
+        SubnetIds:
+          - Fn::ImportValue: micromart-PrivateSubnetA
+          - Fn::ImportValue: micromart-PrivateSubnetB
+        EndpointPrivateAccess: true
+        EndpointPublicAccess: true
+        PublicAccessCidrs:
+          - !Ref KubectlAdminCidr
+      AccessConfig:
+        AuthenticationMode: API_AND_CONFIG_MAP
+        BootstrapClusterCreatorAdminPermissions: true
+      Tags:
+        - Key: Project
+          Value: MicroMart
+        - Key: Environment
+          Value: Capstone
+
+  # Managed EC2 worker nodes
+  EKSNodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Ref EKSCluster
+      NodegroupName: micromart-workers
+      NodeRole: !GetAtt EKSNodeRole.Arn
+      Subnets:
+        - Fn::ImportValue: micromart-PrivateSubnetA
+        - Fn::ImportValue: micromart-PrivateSubnetB
+      InstanceTypes:
+        - !Ref NodeInstanceType
+      AmiType: AL2023_x86_64_STANDARD
+      CapacityType: ON_DEMAND
+      DiskSize: 20
+      ScalingConfig:
+        MinSize: 2
+        DesiredSize: 2
+        MaxSize: 2
+      UpdateConfig:
+        MaxUnavailable: 1
+      Labels:
+        Project: micromart
+        Workload: application
+      Tags:
+        Project: MicroMart
+        Environment: Capstone
+
+Outputs:
+  ClusterName:
+    Description: EKS cluster name
+    Value: !Ref EKSCluster
+
+  ClusterArn:
+    Description: EKS cluster ARN
+    Value: !GetAtt EKSCluster.Arn
+
+  ClusterEndpoint:
+    Description: Kubernetes API endpoint
+    Value: !GetAtt EKSCluster.Endpoint
+
+  NodeGroupName:
+    Description: Managed node group name
+    Value: !Ref EKSNodeGroup
+
+  ClusterVersion:
+    Description: Kubernetes version
+    Value: !Ref KubernetesVersion

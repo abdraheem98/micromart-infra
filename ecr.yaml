@@ -1,0 +1,71 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: MicroMart container image repositories.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: micromart
+
+Resources:
+  ProductRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}-product'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      Tags:
+        - Key: Project
+          Value: MicroMart
+
+  InventoryRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}-inventory'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      Tags:
+        - Key: Project
+          Value: MicroMart
+
+  OrdersRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}-orders'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      Tags:
+        - Key: Project
+          Value: MicroMart
+
+  FrontendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}-frontend'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      Tags:
+        - Key: Project
+          Value: MicroMart
+
+Outputs:
+  ProductRepositoryUri:
+    Value: !GetAtt ProductRepository.RepositoryUri
+  InventoryRepositoryUri:
+    Value: !GetAtt InventoryRepository.RepositoryUri
+  OrdersRepositoryUri:
+    Value: !GetAtt OrdersRepository.RepositoryUri
+  FrontendRepositoryUri:
+    Value: !GetAtt FrontendRepository.RepositoryUri
